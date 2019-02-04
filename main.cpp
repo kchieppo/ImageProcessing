@@ -6,6 +6,10 @@
 using namespace cv;
 using namespace std;
 
+/*
+add lookup tables to everything
+*/
+
 // fastest is cv::filter2D
 void mySharpen(const Mat& myImage, Mat& result);
 
@@ -19,6 +23,13 @@ void myImageBlender(const Mat& myImage1, const Mat& myImage2, Mat& result,
 void myManualImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 	double alpha);
 
+void myAverageBlurrer(const Mat& myImage, Mat& result);
+
+void myContrastAndBrightness(const Mat& myImage, Mat& myResult,
+	double alpha, double beta);
+
+void myGammaCorrection(const Mat& myImage, Mat& result, double gamma);
+
 int main()
 {
 	Mat src1, src2, dst0, dst1;
@@ -27,19 +38,22 @@ int main()
 	src2 = imread("..\\..\\Images\\Koala.jpg", IMREAD_COLOR);
 
 	namedWindow("Input 1", WINDOW_AUTOSIZE);
-	namedWindow("Input 2", WINDOW_AUTOSIZE);
+//	namedWindow("Input 2", WINDOW_AUTOSIZE);
 	namedWindow("Output", WINDOW_AUTOSIZE);
 //	namedWindow("Output H", WINDOW_AUTOSIZE);
 //	namedWindow("Output V", WINDOW_AUTOSIZE);
 
 	imshow("Input 1", src1);
-	imshow("Input 2", src2);
+//	imshow("Input 2", src2);
 
 //	myImageBlender(src1, src2, dst0);
-	myManualImageBlender(src1, src2, dst0, 0.5);
+//	myManualImageBlender(src1, src2, dst0, 0.5);
 //	myHorizontalEdgeDetector(src1, dst0);
 //	myVerticalEdgeDetector(src1, dst1);
 //	mySharpen(src, dst0);
+//	myAverageBlurrer(src1, dst0);
+//	myContrastAndBrightness(src1, dst0, 0.5, 0);
+//	myGammaCorrection(src1, dst0, 0.5);
 
 	imshow("Output", dst0);
 //	imshow("Output H", dst0);
@@ -166,7 +180,8 @@ void myManualImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 		uchar* output = result.ptr<uchar>(j);
 
 		for (int i = 0; i < nChannels*mySrc1.cols; ++i)
-			*output++ = (1.0 - alpha)*current1[i] + alpha*current2[i];
+			*output++ = saturate_cast<uchar>((1.0 - alpha)*current1[i]
+				+ alpha*current2[i]);
 	}
 }
 
@@ -174,4 +189,71 @@ void myImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 	double alpha)
 {
 	addWeighted(mySrc1, alpha, mySrc2, 1.0 - alpha, 0.0, result);
+}
+
+void myAverageBlurrer(const Mat& myImage, Mat& result)
+{
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	const int nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	for (int j = 1; j < myImage.rows - 1; ++j)
+	{
+		const uchar* previous = myImage.ptr<uchar>(j - 1);
+		const uchar* current = myImage.ptr<uchar>(j);
+		const uchar* next = myImage.ptr<uchar>(j + 1);
+
+		uchar* output = result.ptr<uchar>(j);
+
+		double oneNinth = 1 / 9.0;
+		for (int i = nChannels; i < nChannels*(myImage.cols - 1); ++i)
+		{
+			*output++ = saturate_cast<uchar>(oneNinth*(previous[i-nChannels]
+				+ previous[i] + previous[i+nChannels] + current[i-nChannels]
+				+ current[i] + current[i+nChannels] + next[i-nChannels]
+				+ next[i] + next[i+nChannels]));
+		}
+
+		result.row(0).setTo(Scalar(0));
+		result.row(result.rows - 1).setTo(Scalar(0));
+		result.col(0).setTo(Scalar(0));
+		result.col(result.cols - 1).setTo(Scalar(0));
+	}
+}
+
+void myContrastAndBrightness(const Mat& myImage, Mat& result,
+	double alpha, double beta)
+{
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	const int nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	for (int j = 0; j < myImage.rows; ++j)
+	{
+		const uchar* current = myImage.ptr<uchar>(j);
+		uchar* output = result.ptr<uchar>(j);
+
+		for (int i = 0; i < nChannels*myImage.cols; ++i)
+			*output++ = saturate_cast<uchar>(alpha*current[i] + beta);
+	}
+}
+
+void myGammaCorrection(const Mat& myImage, Mat& result, double gamma)
+{
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	const int nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	for (int j = 0; j < myImage.rows; ++j)
+	{
+		const uchar* current = myImage.ptr<uchar>(j);
+		uchar* output = result.ptr<uchar>(j);
+
+		for (int i = 0; i < nChannels*myImage.cols; ++i)
+			*output++ = saturate_cast<uchar>(
+				pow(current[i]/255.0, gamma) * 255.0);
+	}
 }
