@@ -42,7 +42,7 @@ int main()
 	Mat src1, src2, dst0, dst1;
 
 	src1 = imread("..\\..\\Images\\Desert.jpg",
-		IMREAD_GRAYSCALE);
+		IMREAD_COLOR);
 	src2 = imread("..\\..\\Images\\Koala.jpg",
 		IMREAD_GRAYSCALE);
 
@@ -380,7 +380,7 @@ void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 				{
 					imageCurrent = myImage.ptr<uchar>(j + kJ);
 					*output += saturate_cast<uchar>(
-						imageCurrent[i + kI] * kernel[kJ][kI]);
+						imageCurrent[i + kI * nChannels] * kernel[kJ][kI]);
 				}
 			}
 			++output;
