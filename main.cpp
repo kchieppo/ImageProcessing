@@ -32,48 +32,67 @@ void myContrastAndBrightness(const Mat& myImage, Mat& myResult,
 
 void myGammaCorrection(const Mat& myImage, Mat& result, double gamma);
 
+// only works for grayscale
 void myDft(const Mat& myImage, Mat& result);
 
 void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
-	int sigX, int sigY);
+	int sigX, int sigY, bool highPass);
+
+void myMedianFilter(const Mat& mImage, Mat& result, Size kSize);
+
+void myManualLaplacianFilter(const Mat& mImage, Mat& result, Size ksize);
+
+int myQuickSelect(std::vector<uchar>& list, int left, int right, int k);
+
+int partition(std::vector<uchar>& list, int left, int right);
+
 
 int main()
 {
-	Mat src1, src2, dst0, dst1;
+	Mat src1, src2, src3, dst0, dst1;
 
-	src1 = imread("..\\..\\Images\\Desert.jpg",
-		IMREAD_COLOR);
-	src2 = imread("..\\..\\Images\\Koala.jpg",
-		IMREAD_GRAYSCALE);
+	if (!DEBUG_MODE)
+	{
+		src1 = imread("..\\..\\Images\\Desert.jpg",
+			IMREAD_GRAYSCALE);
+		src2 = imread("..\\..\\Images\\Koala.jpg",
+			IMREAD_GRAYSCALE);
+		src3 = imread("..\\..\\Images\\Noise_salt_and_pepper.png",
+			IMREAD_GRAYSCALE);
+	}
+	else
+	{
+		src1 = imread("..\\Images\\Desert.jpg",
+			IMREAD_GRAYSCALE);
+		src2 = imread("..\\Images\\Koala.jpg",
+			IMREAD_GRAYSCALE);
+		src3 = imread("..\\Images\\Noise_salt_and_pepper.png",
+			IMREAD_GRAYSCALE);
+	}
 
-	namedWindow("Input 1", WINDOW_AUTOSIZE);
-//	namedWindow("Input 2", WINDOW_AUTOSIZE);
-	namedWindow("Output", WINDOW_AUTOSIZE);
-//	namedWindow("Output H", WINDOW_AUTOSIZE);
-//	namedWindow("Output V", WINDOW_AUTOSIZE);
 
-	imshow("Input 1", src1);
-//	imshow("Input 2", src2);
+	namedWindow("Input", WINDOW_AUTOSIZE);
+	namedWindow("Output Median", WINDOW_AUTOSIZE);
+
+	imshow("Input", src3);
 
 //	myImageBlender(src1, src2, dst0);
 //	myManualImageBlender(src1, src2, dst0, 0.40);
-//	myHorizontalEdgeDetector(src1, dst0);
+//	myHorizontalEdgeDetector(src2, dst0);
 //	myVerticalEdgeDetector(src1, dst0);
 //	mySharpen(src1, dst0);
 //	myNormalizedBoxFilter(src1, dst0);
 //	myContrastAndBrightness(src1, dst0, 0, 5);
 //	myGammaCorrection(src1, dst0, 0.5);
 //	myDft(src1, dst0);
-	myManualGaussianFilter(src1, dst0, Size(5, 5), 1, 1);
-	GaussianBlur(src1, dst1, Size(5, 5), 1, 1);
-	Mat x = getGaussianKernel(5, 1);
-	Mat y = getGaussianKernel(5, 1);
-	Mat k = x * y.t();
-	cout << "cv 2d kernal: \n" << k << endl;
+//	GaussianBlur(src2, dst0, Size(3, 3), 1, 1);
+//	myManualGaussianFilter(src2, dst0, Size(9, 9), 2, 2, true);
+//	myDft(dst0, dst1);
+//	myMedianFilter(src3, dst0, Size(3, 3));
+//	Laplacian(dst0, dst0, CV_8U, 3);
 
-	imshow("Output Mine", dst0);
-	imshow("Output", dst1);
-//	imshow("Output V", dst1);
+	imshow("Output Median", dst0);
+
 
 	waitKey();
 	return 0;
@@ -325,7 +344,7 @@ void myDft(const Mat& myImage, Mat& result)
 }
 
 void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
-	int sigX, int sigY)
+	int sigX, int sigY, bool highPass)
 {
 	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
 
@@ -362,28 +381,113 @@ void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 	kernel = kernel / denominator;
 	cout << "Kernel after normalization: \n" << kernel << endl;
 
+	// high pass gaussian
+	if (highPass)
+	{
+		for (int row = 0; row < kSize.height; ++row)
+			for (int col = 0; col < kSize.width; ++col)
+				if (row == (kSize.height - 1) / 2
+					&& col == (kSize.width - 1) / 2)
+					kernel.at<double>(row, col) =
+						1 - kernel.at<double>(row, col);
+				else
+					kernel.at<double>(row, col) =
+						-1 * kernel.at<double>(row, col);
+
+		cout << "high pass: " << kernel << endl;
+	}
+
 	// take channels into account (so both gray and color images work)
 	const uchar nChannels = myImage.channels();
 	result.create(myImage.size(), myImage.type());
 
-	for (int j = yMean; j < myImage.rows - 1 - yMean; ++j)
+	for (int j = yMean; j < myImage.rows - yMean; ++j)
 	{
 		const uchar* imageCurrent;
 		uchar* output = result.ptr<uchar>(j);
 
 		for (int i = xMean*nChannels;
-			i < (myImage.cols - 1 - xMean)*nChannels; ++i)
+			i < (myImage.cols - xMean)*nChannels;++i)
 		{
-			for (int kJ = 0; kJ < kSize.height - 1; ++kJ)
+			for (int kJ = -yMean; kJ < yMean + 1; ++kJ)
 			{
-				for (int kI = 0; kI < kSize.width - 1; ++kI)
-				{
-					imageCurrent = myImage.ptr<uchar>(j + kJ);
+				imageCurrent = myImage.ptr<uchar>(j + kJ);
+				for (int kI = -xMean; kI < xMean + 1; ++kI)
 					*output += saturate_cast<uchar>(
-						imageCurrent[i + kI * nChannels] * kernel[kJ][kI]);
-				}
+						imageCurrent[i + kI * nChannels]
+						* kernel[kJ + yMean][kI + xMean]);
 			}
 			++output;
 		}
 	}
+}
+
+void myMedianFilter(const Mat& myImage, Mat& result, Size kSize)
+{
+	// compute x and y midpoints
+	const uchar xMid = (kSize.width - 1) / 2;
+	const uchar yMid = (kSize.height - 1) / 2;
+
+	// take channels into account (so both gray and color images work)
+	const uchar nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	uchar chCopy;
+	std::vector<uchar> buffer;
+
+	for (int j = yMid; j < myImage.rows - yMid; ++j)
+	{
+		const uchar* imageCurrent;
+		uchar* output = result.ptr<uchar>(j);
+
+		for (int i = xMid*nChannels;
+			i < (myImage.cols - xMid)*nChannels; ++i)
+		{
+			for (int kJ = -yMid; kJ < yMid + 1; ++kJ)
+			{
+				imageCurrent = myImage.ptr<uchar>(j + kJ);
+				for (int kI = -xMid; kI < xMid + 1; ++kI)
+				{
+					chCopy = imageCurrent[i + kI * nChannels];
+					buffer.push_back(chCopy);
+				}
+			}
+			*output++ = myQuickSelect(buffer, 0, kSize.width*kSize.height - 1,
+				kSize.width*kSize.height / 2);
+			buffer.clear();
+		}
+	}
+}
+
+void myManualLaplacianFilter(const Mat& mImage, Mat& result, Size ksize)
+{
+
+}
+
+int myQuickSelect(std::vector<uchar>& list, int left, int right, int k)
+{
+	int p = partition(list, left, right);
+	if (k == p)
+		return list[k];
+	else if (k < p)
+		return myQuickSelect(list, left, p - 1, k);
+	else
+		return myQuickSelect(list, p + 1, right, k);
+}
+
+int partition(std::vector<uchar>& list, int left, int right)
+{
+	int pivot = list[right], i = left, x;
+
+	for (x = left; x < right; ++x)
+	{
+		if (list[x] < pivot)
+		{
+			swap(list[i], list[x]);
+			++i;
+		}
+	}
+
+	swap(list[i], list[right]);
+	return i;
 }
