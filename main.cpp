@@ -12,12 +12,15 @@ using namespace std;
 add lookup tables to everything
 */
 
+void myNegative(const Mat& myImage, Mat& result);
 // fastest is cv::filter2D
 void mySharpen(const Mat& myImage, Mat& result);
 
-void myHorizontalEdgeDetector(const Mat& myImage, Mat& result);
+void myHorizontalSobel(const Mat& myImage, Mat& result);
 
-void myVerticalEdgeDetector(const Mat& myImage, Mat& result);
+void myVerticalSobel(const Mat& myImage, Mat& result);
+
+void myXYSobel(const Mat& myImage, Mat& result);
 
 void myImageBlender(const Mat& myImage1, const Mat& myImage2, Mat& result,
 	double alpha = 0.5);
@@ -31,16 +34,17 @@ void myContrastAndBrightness(const Mat& myImage, Mat& myResult,
 	double alpha, double beta);
 
 void myGammaCorrection(const Mat& myImage, Mat& result, double gamma);
-
 // only works for grayscale
 void myDft(const Mat& myImage, Mat& result);
 
 void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 	int sigX, int sigY, bool highPass);
 
-void myMedianFilter(const Mat& mImage, Mat& result, Size kSize);
+void myMedianFilter(const Mat& myImage, Mat& result, Size kSize);
 
-void myManualLaplacianFilter(const Mat& mImage, Mat& result, Size ksize);
+void myManualLaplacian(const Mat& myImage, Mat& result, Size ksize);
+
+void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size ksize);
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k);
 
@@ -49,7 +53,7 @@ int partition(std::vector<uchar>& list, int left, int right);
 
 int main()
 {
-	Mat src1, src2, src3, dst0, dst1;
+	Mat src1, src2, src3, dst1, dst2, dst3;
 
 	if (!DEBUG_MODE)
 	{
@@ -70,32 +74,33 @@ int main()
 			IMREAD_GRAYSCALE);
 	}
 
-
 	namedWindow("Input", WINDOW_AUTOSIZE);
-	namedWindow("Output Median", WINDOW_AUTOSIZE);
+	namedWindow("Output", WINDOW_AUTOSIZE);
 
-	imshow("Input", src3);
+	myManualLaplacian(src1, dst1, Size(3,3));
 
-//	myImageBlender(src1, src2, dst0);
-//	myManualImageBlender(src1, src2, dst0, 0.40);
-//	myHorizontalEdgeDetector(src2, dst0);
-//	myVerticalEdgeDetector(src1, dst0);
-//	mySharpen(src1, dst0);
-//	myNormalizedBoxFilter(src1, dst0);
-//	myContrastAndBrightness(src1, dst0, 0, 5);
-//	myGammaCorrection(src1, dst0, 0.5);
-//	myDft(src1, dst0);
-//	GaussianBlur(src2, dst0, Size(3, 3), 1, 1);
-//	myManualGaussianFilter(src2, dst0, Size(9, 9), 2, 2, true);
-//	myDft(dst0, dst1);
-//	myMedianFilter(src3, dst0, Size(3, 3));
-//	Laplacian(dst0, dst0, CV_8U, 3);
-
-	imshow("Output Median", dst0);
-
+	imshow("Input", src1);
+	imshow("Output", dst1);
 
 	waitKey();
 	return 0;
+}
+
+void myNegative(const Mat& myImage, Mat& result)
+{
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	const int nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	for (int j = 0; j < myImage.rows; ++j)
+	{
+		const uchar* current = myImage.ptr<uchar>(j);
+		uchar* output = result.ptr<uchar>(j);
+
+		for (int i = 0; i < nChannels*myImage.cols; ++i)
+			*output++ = 255 - current[i];
+	}
 }
 
 void mySharpen(const Mat& myImage, Mat& result)
@@ -128,7 +133,7 @@ void mySharpen(const Mat& myImage, Mat& result)
 
 }
 
-void myHorizontalEdgeDetector(const Mat& myImage, Mat& result)
+void myHorizontalSobel(const Mat& myImage, Mat& result)
 {
 	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
 
@@ -157,7 +162,7 @@ void myHorizontalEdgeDetector(const Mat& myImage, Mat& result)
 	}
 }
 
-void myVerticalEdgeDetector(const Mat& myImage, Mat& result)
+void myVerticalSobel(const Mat& myImage, Mat& result)
 {
 	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
 
@@ -185,6 +190,18 @@ void myVerticalEdgeDetector(const Mat& myImage, Mat& result)
 		result.col(0).setTo(Scalar(0));
 		result.col(result.cols - 1).setTo(Scalar(0));
 	}
+}
+
+void myXYSobel(const Mat& myImage, Mat& result)
+{
+	result.create(myImage.size(), myImage.type());
+
+	Mat temp1, temp2;
+
+	myHorizontalSobel(myImage, temp1);
+	myVerticalSobel(myImage, temp2);
+
+	addWeighted(temp1, 0.5, temp2, 0.5, 0, result);
 }
 
 void myManualImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
@@ -459,7 +476,37 @@ void myMedianFilter(const Mat& myImage, Mat& result, Size kSize)
 	}
 }
 
-void myManualLaplacianFilter(const Mat& mImage, Mat& result, Size ksize)
+void myManualLaplacian(const Mat& myImage, Mat& result, Size ksize)
+{
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	const int nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	for (int j = 1; j < myImage.rows - 1; ++j)
+	{
+		const uchar* previous = myImage.ptr<uchar>(j - 1);
+		const uchar* current = myImage.ptr<uchar>(j);
+		const uchar* next = myImage.ptr<uchar>(j + 1);
+
+		uchar* output = result.ptr<uchar>(j);
+
+		for (int i = nChannels; i < nChannels*(myImage.cols - 1); ++i)
+		{
+			*output++ = saturate_cast<uchar>(previous[i - nChannels]
+				+ previous[i] + previous[i + nChannels] + current[i - nChannels]
+				- 8*current[i] + current[i + nChannels] + next[i - nChannels]
+				+ next[i] + next[i + nChannels]);
+		}
+
+		result.row(0).setTo(Scalar(0));
+		result.row(result.rows - 1).setTo(Scalar(0));
+		result.col(0).setTo(Scalar(0));
+		result.col(result.cols - 1).setTo(Scalar(0));
+	}
+}
+
+void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size ksize)
 {
 
 }
