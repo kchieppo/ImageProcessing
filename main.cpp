@@ -9,8 +9,14 @@ using namespace cv;
 using namespace std;
 
 /*
-add lookup tables to everything
+TODO
+- add lookup tables where needed
+- pass things by reference to avoid copying
 */
+
+enum KType { Gaussian, LaplacianOfGaussian };
+
+enum EdgeStrength { NonEdge, Weak, Strong };
 
 void myNegative(const Mat& myImage, Mat& result);
 // fastest is cv::filter2D
@@ -37,23 +43,30 @@ void myGammaCorrection(const Mat& myImage, Mat& result, double gamma);
 // only works for grayscale
 void myDft(const Mat& myImage, Mat& result);
 
-void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
-	int sigX, int sigY, bool highPass);
+Mat_<double> getKernel(Size ksize, int sigX, int sigY, bool highPass,
+	KType kType);
+
+void myManualGaussian(const Mat& myImage, Mat& result, Size kSize, int sigX,
+	int sigY, bool highPass);
 
 void myMedianFilter(const Mat& myImage, Mat& result, Size kSize);
 
 void myManualLaplacian(const Mat& myImage, Mat& result, Size ksize);
 
-void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size ksize);
+void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
+	int sigX, int sigY, bool highPass);
+
+void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
+	Mat& result4, Size kSize, int sigX, int sigY, int weakThreshold,
+	int strongThreshold);
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k);
 
 int partition(std::vector<uchar>& list, int left, int right);
 
-
 int main()
 {
-	Mat src1, src2, src3, dst1, dst2, dst3;
+	Mat src1, src2, src3, dst1, dst2, dst3, dst4;
 
 	if (!DEBUG_MODE)
 	{
@@ -75,12 +88,18 @@ int main()
 	}
 
 	namedWindow("Input", WINDOW_AUTOSIZE);
-	namedWindow("Output", WINDOW_AUTOSIZE);
+	namedWindow("Magnitude", WINDOW_AUTOSIZE);
+	namedWindow("Non-maximum Suppression", WINDOW_AUTOSIZE);
+	namedWindow("Double Thresholding", WINDOW_AUTOSIZE);
+	namedWindow("Edge Tracking", WINDOW_AUTOSIZE);
 
-	myManualLaplacian(src1, dst1, Size(3,3));
+	myCanny(src2, dst1, dst2, dst3, dst4, Size(3, 3), 1, 1, 100, 200);
 
-	imshow("Input", src1);
-	imshow("Output", dst1);
+	imshow("Input", src2);
+	imshow("Magnitude", dst1);
+	imshow("Non-maximum Suppression", dst2);
+	imshow("Double Thresholding", dst3);
+	imshow("Edge Tracking", dst4);
 
 	waitKey();
 	return 0;
@@ -360,11 +379,9 @@ void myDft(const Mat& myImage, Mat& result)
 	normalize(result, result, 0, 1, NORM_MINMAX);
 }
 
-void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
-	int sigX, int sigY, bool highPass)
+Mat_<double> getKernel(Size kSize, int sigX, int sigY, bool highPass,
+	KType kType)
 {
-	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
-
 	// compute x and y means
 	const uchar xMean = (kSize.width - 1) / 2;
 	const uchar yMean = (kSize.height - 1) / 2;
@@ -379,7 +396,7 @@ void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 	for (int i = 0; i < kSize.width; ++i)
 	{
 		x = i - xMean;
-		gaussX.col(i) = exp(-pow(x,2) * xSpread);
+		gaussX.col(i) = exp(-pow(x, 2) * xSpread);
 	}
 
 	// combine with y to get kernel
@@ -388,7 +405,22 @@ void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 	for (int i = 0; i < kSize.height; ++i)
 	{
 		y = i - yMean;
-		kernel.row(i) = gaussX * exp(-pow(y,2) * ySpread);
+		kernel.row(i) = gaussX * exp(-pow(y, 2) * ySpread);
+	}
+
+	if (kType == KType::LaplacianOfGaussian)
+	{
+		for (int row = 0; row < kSize.height; ++row)
+		{
+			for (int col = 0; col < kSize.width; ++col)
+			{
+				y = row - yMean;
+				x = col - xMean;
+				kernel.at<double>(row, col) *=
+					(((pow(x, 2) - pow(sigX, 2)) / pow(sigY, 4)) +
+					((pow(y, 2) - pow(sigY, 2)) / pow(sigY, 4)));
+			}
+		}
 	}
 
 	// normalize
@@ -396,7 +428,6 @@ void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 	for (auto k : kernel)
 		denominator += k;
 	kernel = kernel / denominator;
-	cout << "Kernel after normalization: \n" << kernel << endl;
 
 	// high pass gaussian
 	if (highPass)
@@ -406,13 +437,26 @@ void myManualGaussianFilter(const Mat& myImage, Mat& result, Size kSize,
 				if (row == (kSize.height - 1) / 2
 					&& col == (kSize.width - 1) / 2)
 					kernel.at<double>(row, col) =
-						1 - kernel.at<double>(row, col);
+					1 - kernel.at<double>(row, col);
 				else
 					kernel.at<double>(row, col) =
-						-1 * kernel.at<double>(row, col);
-
-		cout << "high pass: " << kernel << endl;
+					-1 * kernel.at<double>(row, col);
 	}
+
+	return kernel;
+}
+
+void myManualGaussian(const Mat& myImage, Mat& result, Size kSize, int sigX,
+	int sigY, bool highPass)
+{
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	// compute x and y means
+	const uchar xMean = (kSize.width - 1) / 2;
+	const uchar yMean = (kSize.height - 1) / 2;
+
+	Mat_<double> kernel = getKernel(kSize, sigX, sigY, highPass,
+		KType::Gaussian);
 
 	// take channels into account (so both gray and color images work)
 	const uchar nChannels = myImage.channels();
@@ -506,9 +550,234 @@ void myManualLaplacian(const Mat& myImage, Mat& result, Size ksize)
 	}
 }
 
-void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size ksize)
+void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
+	int sigX, int sigY, bool highPass)
 {
 
+	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
+
+	// compute x and y means
+	const uchar xMean = (kSize.width - 1) / 2;
+	const uchar yMean = (kSize.height - 1) / 2;
+
+	Mat_<double> kernel = getKernel(kSize, sigX, sigY, highPass,
+		KType::LaplacianOfGaussian);
+
+	cout << "kernel: \n" << kernel << endl;
+
+	// take channels into account (so both gray and color images work)
+	const uchar nChannels = myImage.channels();
+	result.create(myImage.size(), myImage.type());
+
+	for (int j = yMean; j < myImage.rows - yMean; ++j)
+	{
+		const uchar* imageCurrent;
+		uchar* output = result.ptr<uchar>(j);
+
+		for (int i = xMean * nChannels;
+			i < (myImage.cols - xMean)*nChannels; ++i)
+		{
+			for (int kJ = -yMean; kJ < yMean + 1; ++kJ)
+			{
+				imageCurrent = myImage.ptr<uchar>(j + kJ);
+				for (int kI = -xMean; kI < xMean + 1; ++kI)
+					*output += saturate_cast<uchar>(
+						imageCurrent[i + kI * nChannels]
+						* kernel[kJ + yMean][kI + xMean]);
+			}
+			++output;
+		}
+	}
+}
+
+/*
+Broke canny up into separate stages to observe each stage's effect. Could
+be made much more efficient by combining the stages.
+*/
+void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
+	Mat& result4, Size kSize, int sigX, int sigY, int weakThreshold,
+	int strongThreshold)
+{
+	// Smoothing
+	Mat gaussianBlurred;
+	GaussianBlur(myImage, gaussianBlurred, kSize, sigX, sigY);
+
+	// Gradients
+	Mat gX, gY;
+	Sobel(gaussianBlurred, gX, CV_16S, 1, 0);
+	Sobel(gaussianBlurred, gY, CV_16S, 0, 1);
+
+	Mat magnitude(gX.size(), gX.type());
+	Mat direction(gX.size(), gX.type());
+	Mat edgeStrength(gX.size(), CV_8U);
+	short x, y;
+	short mag;
+	short arctanVal;
+	short rounded;
+	for (int col = 0; col < gX.cols; ++col)
+	{
+		for (int row = 0; row < gX.rows; ++row)
+		{
+			x = gX.at<short>(row, col);
+			y = gY.at<short>(row, col);
+			mag = sqrt(pow(x, 2) + pow(y, 2));
+
+			if (mag < weakThreshold)
+				edgeStrength.at<uchar>(row, col) = EdgeStrength::NonEdge;
+			else if (mag > strongThreshold)
+				edgeStrength.at<uchar>(row, col) = EdgeStrength::Weak;
+			else
+				edgeStrength.at<uchar>(row, col) = EdgeStrength::Strong;
+
+			magnitude.at<short>(row, col) = mag;
+			arctanVal = cvFastArctan(y, x);
+			rounded = ((short)(arctanVal + 22.5) / 45) * 45;
+			if (rounded > 135) rounded -= 180;
+			direction.at<short>(row, col) = rounded;
+		}
+	}
+
+	convertScaleAbs(magnitude, result);
+
+	short curDir, curMag;
+	bool zeroOut = false;
+	for (int row = 0; row < magnitude.rows; ++row)
+	{
+		for (int col = 0; col < magnitude.cols; ++col)
+		{
+			curMag = magnitude.at<short>(row, col);
+			curDir = direction.at<short>(row, col);
+			if (curDir == 0) // check left, right
+			{
+				if (col + 1 < magnitude.cols) // check right bound
+					if (curMag < magnitude.at<short>(row, col + 1))
+						zeroOut = true;
+				if (col - 1 >= 0) // check left bound
+					if (curMag < magnitude.at<short>(row, col - 1))
+						zeroOut = true;
+			}
+			else if (curDir == 45) // check upright, downleft
+			{
+				if (row - 1 >= 0 && col + 1 < magnitude.cols) // check upright bound
+					if (curMag < magnitude.at<short>(row - 1, col + 1))
+						zeroOut = true;
+				if (row + 1 < magnitude.rows && col - 1 >= 0) // check downleft bound
+					if (curMag < magnitude.at<short>(row + 1, col - 1))
+						zeroOut = true;
+			}
+			else if (curDir == 90) // check up, down
+			{
+				if (row - 1 >= 0) // check up bound
+					if (curMag < magnitude.at<short>(row - 1, col))
+						zeroOut = true;
+				if (row + 1 < magnitude.rows) // check down bound
+					if (curMag < magnitude.at<short>(row + 1, col))
+						zeroOut = true;
+			}
+			else // check upleft, downright
+			{
+				if (row - 1 >= 0 && col - 1 >= 0) // check upleft bound
+					if (curMag < magnitude.at<short>(row - 1, col - 1))
+						zeroOut = true;
+				if (row + 1 < magnitude.rows && col + 1 < magnitude.cols) // check downright bound
+					if (curMag < magnitude.at<short>(row + 1, col + 1))
+						zeroOut = true;
+			}
+			if (zeroOut)
+			{
+				magnitude.at<short>(row, col) = 0;
+				zeroOut = false;
+			}
+		}
+	}
+
+	convertScaleAbs(magnitude, result2);
+
+	// Double thresholding
+	uchar edge;
+	for (int row = 0; row < edgeStrength.rows; ++row)
+	{
+		for (int col = 0; col < edgeStrength.cols; ++col)
+		{
+			edge = edgeStrength.at<uchar>(row, col);
+			if (edge == EdgeStrength::NonEdge)
+				magnitude.at<short>(row, col) = 0;
+			else if (edge == EdgeStrength::Weak)
+				magnitude.at<short>(row, col) = 50;
+			else
+				magnitude.at<short>(row, col) = 255;
+		}
+	}
+
+	convertScaleAbs(magnitude, result3);
+
+	// Edge tracking by hysteresis
+	bool keepEdge = false;
+	for (int row = 0; row < edgeStrength.rows; ++row)
+	{
+		for (int col = 0; col < edgeStrength.cols; ++col)
+		{
+			edge = edgeStrength.at<uchar>(row, col);
+			if (edge == EdgeStrength::Weak)
+			{
+				for (int i = -1; i < 2; ++i)
+				{
+					if (row + i >= 0 && row + i < edgeStrength.rows)
+						for (int j = -1; j < 2; ++j)
+						{
+							if (i == 0 && j == 0) continue;
+							if (col + i >= 0 && col + i < edgeStrength.cols)
+								if (edgeStrength.at<uchar>(row + i, col + i)
+									== EdgeStrength::Strong)
+								{
+									keepEdge = true;
+									break;
+								}
+						}
+					if (keepEdge)
+						break;
+				}
+				if (keepEdge)
+				{
+					keepEdge = false;
+					//// for testing
+					//// print
+					//cout << "Surrounding pixels keep: \n" << endl;
+					//int mag;
+					//for (int i = -1; i < 2; ++i)
+					//{
+					//	for (int j = -1; j < 2; ++j)
+					//	{
+					//		mag = magnitude.at<uchar>(row + i, col + j);
+					//		cout << mag << endl;
+					//		cout << " " << endl;
+					//	}
+					//	cout << "\n" << endl;
+					//}
+				}
+				else
+				{
+					//// for testing
+					//// print
+					//cout << "Surrounding pixels: \n" << endl;
+					//int mag;
+					//for (int i = -1; i < 2; ++i)
+					//{
+					//	for (int j = -1; j < 2; ++j)
+					//	{
+					//		mag = magnitude.at<uchar>(row + i, col + j);
+					//		cout << mag << endl;
+					//		cout << " " << endl;
+					//	}
+					//	cout << "\n" << endl;
+					//}
+					magnitude.at<uchar>(row, col) = 0;
+				}
+			}
+		}
+	}
+
+	convertScaleAbs(magnitude, result4);
 }
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k)
