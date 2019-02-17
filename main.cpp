@@ -57,7 +57,7 @@ void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
 	int sigX, int sigY, bool highPass);
 
 void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
-	Mat& result4, Size kSize, int sigX, int sigY, int weakThreshold,
+	Mat& result4, Mat& result5, Size kSize, int sigX, int sigY, int weakThreshold,
 	int strongThreshold);
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k);
@@ -66,7 +66,7 @@ int partition(std::vector<uchar>& list, int left, int right);
 
 int main()
 {
-	Mat src1, src2, src3, dst1, dst2, dst3, dst4;
+	Mat src1, src2, src3, dst1, dst2, dst3, dst4, dst5;
 
 	if (!DEBUG_MODE)
 	{
@@ -88,18 +88,20 @@ int main()
 	}
 
 	namedWindow("Input", WINDOW_AUTOSIZE);
+	namedWindow("Blurred", WINDOW_AUTOSIZE);
 	namedWindow("Magnitude", WINDOW_AUTOSIZE);
 	namedWindow("Non-maximum Suppression", WINDOW_AUTOSIZE);
 	namedWindow("Double Thresholding", WINDOW_AUTOSIZE);
 	namedWindow("Edge Tracking", WINDOW_AUTOSIZE);
 
-	myCanny(src2, dst1, dst2, dst3, dst4, Size(3, 3), 1, 1, 100, 200);
+	myCanny(src1, dst1, dst2, dst3, dst4, dst5, Size(3, 3), 1, 1, 50, 100);
 
-	imshow("Input", src2);
-	imshow("Magnitude", dst1);
-	imshow("Non-maximum Suppression", dst2);
-	imshow("Double Thresholding", dst3);
-	imshow("Edge Tracking", dst4);
+	imshow("Input", src1);
+	imshow("Blurred", dst1);
+	imshow("Magnitude", dst2);
+	imshow("Non-maximum Suppression", dst3);
+	imshow("Double Thresholding", dst4);
+	imshow("Edge Tracking", dst5);
 
 	waitKey();
 	return 0;
@@ -595,12 +597,14 @@ Broke canny up into separate stages to observe each stage's effect. Could
 be made much more efficient by combining the stages.
 */
 void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
-	Mat& result4, Size kSize, int sigX, int sigY, int weakThreshold,
+	Mat& result4, Mat& result5, Size kSize, int sigX, int sigY, int weakThreshold,
 	int strongThreshold)
 {
 	// Smoothing
 	Mat gaussianBlurred;
 	GaussianBlur(myImage, gaussianBlurred, kSize, sigX, sigY);
+
+	result = gaussianBlurred;
 
 	// Gradients
 	Mat gX, gY;
@@ -625,9 +629,9 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 			if (mag < weakThreshold)
 				edgeStrength.at<uchar>(row, col) = EdgeStrength::NonEdge;
 			else if (mag > strongThreshold)
-				edgeStrength.at<uchar>(row, col) = EdgeStrength::Weak;
-			else
 				edgeStrength.at<uchar>(row, col) = EdgeStrength::Strong;
+			else
+				edgeStrength.at<uchar>(row, col) = EdgeStrength::Weak;
 
 			magnitude.at<short>(row, col) = mag;
 			arctanVal = cvFastArctan(y, x);
@@ -637,7 +641,7 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 		}
 	}
 
-	convertScaleAbs(magnitude, result);
+	convertScaleAbs(magnitude, result2);
 
 	short curDir, curMag;
 	bool zeroOut = false;
@@ -691,7 +695,7 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 		}
 	}
 
-	convertScaleAbs(magnitude, result2);
+	convertScaleAbs(magnitude, result3);
 
 	// Double thresholding
 	uchar edge;
@@ -702,14 +706,14 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 			edge = edgeStrength.at<uchar>(row, col);
 			if (edge == EdgeStrength::NonEdge)
 				magnitude.at<short>(row, col) = 0;
-			else if (edge == EdgeStrength::Weak)
-				magnitude.at<short>(row, col) = 50;
-			else
+			else if (edge == EdgeStrength::Strong)
 				magnitude.at<short>(row, col) = 255;
+			else
+				magnitude.at<short>(row, col) = 50;
 		}
 	}
 
-	convertScaleAbs(magnitude, result3);
+	convertScaleAbs(magnitude, result4);
 
 	// Edge tracking by hysteresis
 	bool keepEdge = false;
@@ -738,46 +742,14 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 						break;
 				}
 				if (keepEdge)
-				{
 					keepEdge = false;
-					//// for testing
-					//// print
-					//cout << "Surrounding pixels keep: \n" << endl;
-					//int mag;
-					//for (int i = -1; i < 2; ++i)
-					//{
-					//	for (int j = -1; j < 2; ++j)
-					//	{
-					//		mag = magnitude.at<uchar>(row + i, col + j);
-					//		cout << mag << endl;
-					//		cout << " " << endl;
-					//	}
-					//	cout << "\n" << endl;
-					//}
-				}
 				else
-				{
-					//// for testing
-					//// print
-					//cout << "Surrounding pixels: \n" << endl;
-					//int mag;
-					//for (int i = -1; i < 2; ++i)
-					//{
-					//	for (int j = -1; j < 2; ++j)
-					//	{
-					//		mag = magnitude.at<uchar>(row + i, col + j);
-					//		cout << mag << endl;
-					//		cout << " " << endl;
-					//	}
-					//	cout << "\n" << endl;
-					//}
-					magnitude.at<uchar>(row, col) = 0;
-				}
+					magnitude.at<short>(row, col) = 0;
 			}
 		}
 	}
 
-	convertScaleAbs(magnitude, result4);
+	convertScaleAbs(magnitude, result5);
 }
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k)
