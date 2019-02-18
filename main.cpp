@@ -56,9 +56,8 @@ void myManualLaplacian(const Mat& myImage, Mat& result, Size ksize);
 void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
 	int sigX, int sigY, bool highPass);
 
-void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
-	Mat& result4, Mat& result5, Size kSize, int sigX, int sigY, int weakThreshold,
-	int strongThreshold);
+void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
+	int weakThreshold, int strongThreshold);
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k);
 
@@ -66,7 +65,8 @@ int partition(std::vector<uchar>& list, int left, int right);
 
 int main()
 {
-	Mat src1, src2, src3, dst1, dst2, dst3, dst4, dst5;
+	Mat src1, src2, src3, src4, src1Smaller;
+	Mat dst[6];
 
 	if (!DEBUG_MODE)
 	{
@@ -87,21 +87,17 @@ int main()
 			IMREAD_GRAYSCALE);
 	}
 
-	namedWindow("Input", WINDOW_AUTOSIZE);
-	namedWindow("Blurred", WINDOW_AUTOSIZE);
-	namedWindow("Magnitude", WINDOW_AUTOSIZE);
-	namedWindow("Non-maximum Suppression", WINDOW_AUTOSIZE);
-	namedWindow("Double Thresholding", WINDOW_AUTOSIZE);
-	namedWindow("Edge Tracking", WINDOW_AUTOSIZE);
+	namedWindow("All", WINDOW_AUTOSIZE);
 
-	myCanny(src1, dst1, dst2, dst3, dst4, dst5, Size(3, 3), 1, 1, 50, 100);
+	resize(src1, src1Smaller, Size(), 0.40, 0.40);
+	myCanny(src1Smaller, dst, Size(3, 3), 1, 1, 30, 80);
 
-	imshow("Input", src1);
-	imshow("Blurred", dst1);
-	imshow("Magnitude", dst2);
-	imshow("Non-maximum Suppression", dst3);
-	imshow("Double Thresholding", dst4);
-	imshow("Edge Tracking", dst5);
+	Mat h[2];
+	Mat out;
+	hconcat(dst, 3, h[0]);
+	hconcat(dst+3, 3, h[1]);
+	vconcat(h, 2, out);
+	imshow("All", out);
 
 	waitKey();
 	return 0;
@@ -596,20 +592,18 @@ void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
 Broke canny up into separate stages to observe each stage's effect. Could
 be made much more efficient by combining the stages.
 */
-void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
-	Mat& result4, Mat& result5, Size kSize, int sigX, int sigY, int weakThreshold,
-	int strongThreshold)
+void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
+	int weakThreshold, int strongThreshold)
 {
-	// Smoothing
-	Mat gaussianBlurred;
-	GaussianBlur(myImage, gaussianBlurred, kSize, sigX, sigY);
+	result[0] = myImage;
 
-	result = gaussianBlurred;
+	// Smoothing
+	GaussianBlur(myImage, result[1], kSize, sigX, sigY);
 
 	// Gradients
 	Mat gX, gY;
-	Sobel(gaussianBlurred, gX, CV_16S, 1, 0);
-	Sobel(gaussianBlurred, gY, CV_16S, 0, 1);
+	Sobel(result[1], gX, CV_16S, 1, 0);
+	Sobel(result[1], gY, CV_16S, 0, 1);
 
 	Mat magnitude(gX.size(), gX.type());
 	Mat direction(gX.size(), gX.type());
@@ -641,7 +635,7 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 		}
 	}
 
-	convertScaleAbs(magnitude, result2);
+	convertScaleAbs(magnitude, result[2]);
 
 	short curDir, curMag;
 	bool zeroOut = false;
@@ -695,7 +689,7 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 		}
 	}
 
-	convertScaleAbs(magnitude, result3);
+	convertScaleAbs(magnitude, result[3]);
 
 	// Double thresholding
 	uchar edge;
@@ -713,7 +707,7 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 		}
 	}
 
-	convertScaleAbs(magnitude, result4);
+	convertScaleAbs(magnitude, result[4]);
 
 	// Edge tracking by hysteresis
 	bool keepEdge = false;
@@ -749,7 +743,7 @@ void myCanny(const Mat& myImage, Mat& result, Mat& result2, Mat& result3,
 		}
 	}
 
-	convertScaleAbs(magnitude, result5);
+	convertScaleAbs(magnitude, result[5]);
 }
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k)
