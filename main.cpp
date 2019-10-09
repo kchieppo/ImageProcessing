@@ -632,7 +632,6 @@ void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
 
 	convertScaleAbs(magnitude, result[2]);
 
-	// Non-maximal suppression
 	short curDir, curMag;
 	bool zeroOut = false;
 	for (int row = 0; row < magnitude.rows; ++row)
