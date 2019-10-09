@@ -34,7 +34,7 @@ void myImageBlender(const Mat& myImage1, const Mat& myImage2, Mat& result,
 void myManualImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 	double alpha);
 
-void myBoxFilter(const Mat& myImage, Mat& result);
+void myNormalizedBoxFilter(const Mat& myImage, Mat& result);
 
 void myContrastAndBrightness(const Mat& myImage, Mat& myResult,
 	double alpha, double beta);
@@ -141,11 +141,13 @@ void mySharpen(const Mat& myImage, Mat& result)
 				- current[i - nChannels] - current[i + nChannels]
 				- previous[i] - next[i]);
 		}
+
+		result.row(0).setTo(Scalar(0));
+		result.row(result.rows-1).setTo(Scalar(0));
+		result.col(0).setTo(Scalar(0));
+		result.col(result.cols-1).setTo(Scalar(0));
 	}
-	result.row(0).setTo(Scalar(0));
-	result.row(result.rows-1).setTo(Scalar(0));
-	result.col(0).setTo(Scalar(0));
-	result.col(result.cols-1).setTo(Scalar(0));
+
 }
 
 void myHorizontalSobel(const Mat& myImage, Mat& result)
@@ -169,11 +171,12 @@ void myHorizontalSobel(const Mat& myImage, Mat& result)
 				+ next[i+nChannels] - (previous[i-nChannels] + 2*previous[i]
 				+ previous[i+nChannels]));
 		}
+
+		result.row(0).setTo(Scalar(0));
+		result.row(result.rows - 1).setTo(Scalar(0));
+		result.col(0).setTo(Scalar(0));
+		result.col(result.cols - 1).setTo(Scalar(0));
 	}
-	result.row(0).setTo(Scalar(0));
-	result.row(result.rows - 1).setTo(Scalar(0));
-	result.col(0).setTo(Scalar(0));
-	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myVerticalSobel(const Mat& myImage, Mat& result)
@@ -198,11 +201,12 @@ void myVerticalSobel(const Mat& myImage, Mat& result)
 				- (previous[i-nChannels] + 2*current[i-nChannels]
 				+ next[i+nChannels]));
 		}
+
+		result.row(0).setTo(Scalar(0));
+		result.row(result.rows - 1).setTo(Scalar(0));
+		result.col(0).setTo(Scalar(0));
+		result.col(result.cols - 1).setTo(Scalar(0));
 	}
-	result.row(0).setTo(Scalar(0));
-	result.row(result.rows - 1).setTo(Scalar(0));
-	result.col(0).setTo(Scalar(0));
-	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myXYSobel(const Mat& myImage, Mat& result)
@@ -256,7 +260,7 @@ void myImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 	addWeighted(mySrc1, alpha, mySrc2, 1.0 - alpha, 0.0, result);
 }
 
-void myBoxFilter(const Mat& myImage, Mat& result)
+void myNormalizedBoxFilter(const Mat& myImage, Mat& result)
 {
 	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
 
@@ -279,11 +283,12 @@ void myBoxFilter(const Mat& myImage, Mat& result)
 				+ current[i] + current[i+nChannels] + next[i-nChannels]
 				+ next[i] + next[i+nChannels]));
 		}
+
+		result.row(0).setTo(Scalar(0));
+		result.row(result.rows - 1).setTo(Scalar(0));
+		result.col(0).setTo(Scalar(0));
+		result.col(result.cols - 1).setTo(Scalar(0));
 	}
-	result.row(0).setTo(Scalar(0));
-	result.row(result.rows - 1).setTo(Scalar(0));
-	result.col(0).setTo(Scalar(0));
-	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myContrastAndBrightness(const Mat& myImage, Mat& result,
