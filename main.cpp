@@ -34,7 +34,7 @@ void myImageBlender(const Mat& myImage1, const Mat& myImage2, Mat& result,
 void myManualImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 	double alpha);
 
-void myNormalizedBoxFilter(const Mat& myImage, Mat& result);
+void myBoxFilter(const Mat& myImage, Mat& result);
 
 void myContrastAndBrightness(const Mat& myImage, Mat& myResult,
 	double alpha, double beta);
@@ -59,37 +59,28 @@ void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
 void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
 	int weakThreshold, int strongThreshold);
 
+//void myMooreBoundary(const Mat& myEdgeImage,
+//	std::vector<std::vector<uchar>>& chainCodes);
+
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k);
 
 int partition(std::vector<uchar>& list, int left, int right);
 
 int main()
 {
-	Mat src1, src2, src3, src4, src1Smaller;
+	Mat src1, src1Smaller;
 	Mat dst[6];
 
 	if (!DEBUG_MODE)
-	{
-		src1 = imread("..\\..\\Images\\Desert.jpg",
+		src1 = imread("..\\..\\Images\\Koala.jpg",
 			IMREAD_GRAYSCALE);
-		src2 = imread("..\\..\\Images\\Koala.jpg",
-			IMREAD_GRAYSCALE);
-		src3 = imread("..\\..\\Images\\Noise_salt_and_pepper.png",
-			IMREAD_GRAYSCALE);
-	}
 	else
-	{
-		src1 = imread("..\\Images\\Desert.jpg",
+		src1 = imread("..\\Images\\Koala.jpg",
 			IMREAD_GRAYSCALE);
-		src2 = imread("..\\Images\\Koala.jpg",
-			IMREAD_GRAYSCALE);
-		src3 = imread("..\\Images\\Noise_salt_and_pepper.png",
-			IMREAD_GRAYSCALE);
-	}
 
 	namedWindow("All", WINDOW_AUTOSIZE);
 
-	resize(src1, src1Smaller, Size(), 0.40, 0.40);
+	resize(src1, src1Smaller, Size(), 0.45, 0.45);
 	myCanny(src1Smaller, dst, Size(3, 3), 1, 1, 30, 80);
 
 	Mat h[2];
@@ -98,6 +89,11 @@ int main()
 	hconcat(dst+3, 3, h[1]);
 	vconcat(h, 2, out);
 	imshow("All", out);
+
+   imwrite("canny.jpg", out);
+
+	std::vector<std::vector<uchar>> chainCodes;
+	/*myMooreBoundary(dst[5], chainCodes);*/
 
 	waitKey();
 	return 0;
@@ -141,13 +137,11 @@ void mySharpen(const Mat& myImage, Mat& result)
 				- current[i - nChannels] - current[i + nChannels]
 				- previous[i] - next[i]);
 		}
-
-		result.row(0).setTo(Scalar(0));
-		result.row(result.rows-1).setTo(Scalar(0));
-		result.col(0).setTo(Scalar(0));
-		result.col(result.cols-1).setTo(Scalar(0));
 	}
-
+	result.row(0).setTo(Scalar(0));
+	result.row(result.rows - 1).setTo(Scalar(0));
+	result.col(0).setTo(Scalar(0));
+	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myHorizontalSobel(const Mat& myImage, Mat& result)
@@ -171,12 +165,11 @@ void myHorizontalSobel(const Mat& myImage, Mat& result)
 				+ next[i+nChannels] - (previous[i-nChannels] + 2*previous[i]
 				+ previous[i+nChannels]));
 		}
-
-		result.row(0).setTo(Scalar(0));
-		result.row(result.rows - 1).setTo(Scalar(0));
-		result.col(0).setTo(Scalar(0));
-		result.col(result.cols - 1).setTo(Scalar(0));
 	}
+	result.row(0).setTo(Scalar(0));
+	result.row(result.rows - 1).setTo(Scalar(0));
+	result.col(0).setTo(Scalar(0));
+	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myVerticalSobel(const Mat& myImage, Mat& result)
@@ -201,12 +194,11 @@ void myVerticalSobel(const Mat& myImage, Mat& result)
 				- (previous[i-nChannels] + 2*current[i-nChannels]
 				+ next[i+nChannels]));
 		}
-
-		result.row(0).setTo(Scalar(0));
-		result.row(result.rows - 1).setTo(Scalar(0));
-		result.col(0).setTo(Scalar(0));
-		result.col(result.cols - 1).setTo(Scalar(0));
 	}
+	result.row(0).setTo(Scalar(0));
+	result.row(result.rows - 1).setTo(Scalar(0));
+	result.col(0).setTo(Scalar(0));
+	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myXYSobel(const Mat& myImage, Mat& result)
@@ -260,7 +252,7 @@ void myImageBlender(const Mat& mySrc1, const Mat& mySrc2, Mat& result,
 	addWeighted(mySrc1, alpha, mySrc2, 1.0 - alpha, 0.0, result);
 }
 
-void myNormalizedBoxFilter(const Mat& myImage, Mat& result)
+void myBoxFilter(const Mat& myImage, Mat& result)
 {
 	CV_Assert(myImage.depth() == CV_8U); // accept only uchar images
 
@@ -283,12 +275,11 @@ void myNormalizedBoxFilter(const Mat& myImage, Mat& result)
 				+ current[i] + current[i+nChannels] + next[i-nChannels]
 				+ next[i] + next[i+nChannels]));
 		}
-
-		result.row(0).setTo(Scalar(0));
-		result.row(result.rows - 1).setTo(Scalar(0));
-		result.col(0).setTo(Scalar(0));
-		result.col(result.cols - 1).setTo(Scalar(0));
 	}
+	result.row(0).setTo(Scalar(0));
+	result.row(result.rows - 1).setTo(Scalar(0));
+	result.col(0).setTo(Scalar(0));
+	result.col(result.cols - 1).setTo(Scalar(0));
 }
 
 void myContrastAndBrightness(const Mat& myImage, Mat& result,
@@ -745,6 +736,83 @@ void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
 
 	convertScaleAbs(magnitude, result[5]);
 }
+
+//void myMooreBoundary(const Mat& myEdgeImage,
+//	std::vector<std::vector<uchar>>& chainCodes)
+//{
+//	// find topleft pixel
+//	uchar* firstPixelValue;
+//	int firstPixelRow, firstPixelCol;
+//	for (int row = 0; row < myEdgeImage.rows; ++row)
+//	{
+//		for (int col = 0; col < myEdgeImage.cols; ++col)
+//		{
+//			*firstPixelValue = myEdgeImage.at<uchar>(row, col);
+//			if (*firstPixelValue)
+//			{
+//				firstPixelRow = row;
+//				firstPixelCol = col;
+//				break;
+//			}
+//		}
+//		if (*firstPixelValue)
+//			break;
+//	}
+//
+//	// build chain code
+//	uchar* nextPixelValue;
+//	int nextPixelRow, nextPixelCol;
+//	std::vector<uchar> chain;
+//	while (nextPixelRow != firstPixelRow
+//		&& nextPixelCol != firstPixelCol) // while chain not done
+//	{
+//		// check 8-connected neighborhood
+//		// -1,-1; -1,0; -1,1;
+//		//  0,-1;        0,1;
+//		//  1,-1;  1,0;  1,1;
+//		// start at -1,-1 or first valid pixel clockwise
+//		// increment col until bound
+//		// increment row until bound
+//		// decrement col until bound
+//		// decrement row until equals start
+//
+//		// find first valid pixel, given rectangular image
+//		uchar dy = -1, dx = -1;
+//		if (dy < 0)
+//		{
+//			++row;
+//			col += 2;
+//			if (col == myEdgeImage.cols)
+//			{
+//				++row;
+//				--col;
+//			}
+//		}
+//
+//		for (int x = -1; x < 2; ++x)
+//		{
+//			for (int y = -1; y < 2; ++y)
+//			{
+//
+//			}
+//		}
+//	}
+//	if (pixelCol - 1 >= 0)
+//	{
+//		if (pixelRow - 1 >= 0)
+//		{
+//			*nextPixelValue = myEdgeImage.at<uchar>(pixelRow - 1, pixelCol - 1);
+//			if (*nextPixelValue)
+//			{
+//				chain.push_back(3);
+//			}
+//		}
+//	}
+//	else
+//	{
+//		// check above
+//	}
+//}
 
 int myQuickSelect(std::vector<uchar>& list, int left, int right, int k)
 {
