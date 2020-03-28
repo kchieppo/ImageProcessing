@@ -2,6 +2,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
+#include <array>
 #include <iostream>
 #include <numeric>
 
@@ -56,7 +57,7 @@ void myManualLaplacian(const Mat& myImage, Mat& result, Size ksize);
 void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
 	int sigX, int sigY, bool highPass);
 
-void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
+void myCanny(const Mat& myImage, std::array<Mat, 6>& result, Size kSize, int sigX, int sigY,
 	int weakThreshold, int strongThreshold);
 
 //void myMooreBoundary(const Mat& myEdgeImage,
@@ -69,28 +70,36 @@ int partition(std::vector<uchar>& list, int left, int right);
 int main()
 {
 	Mat src1, src1Smaller;
-	Mat dst[6];
+	std::array<Mat, 6> dst;
 
-	if (!DEBUG_MODE)
-		src1 = imread("..\\..\\Images\\Koala.jpg",
-			IMREAD_GRAYSCALE);
-	else
-		src1 = imread("..\\Images\\Koala.jpg",
-			IMREAD_GRAYSCALE);
+	src1 = imread("C:\\Users\\kchie\\repos\\ImageProcessing\\Images\\Desert.jpg", IMREAD_COLOR);
 
 	namedWindow("All", WINDOW_AUTOSIZE);
 
 	resize(src1, src1Smaller, Size(), 0.45, 0.45);
-	myCanny(src1Smaller, dst, Size(3, 3), 1, 1, 30, 80);
 
-	Mat h[2];
+	/*myCanny(src1Smaller, dst, Size(3, 3), 1, 1, 30, 80);
+
+	std::array<Mat, 2> h;
 	Mat out;
-	hconcat(dst, 3, h[0]);
-	hconcat(dst+3, 3, h[1]);
-	vconcat(h, 2, out);
+	hconcat(dst.data(), 3, h[0]);
+	hconcat(dst.data()+3, 3, h[1]);
+	vconcat(h.data(), 2, out);
 	imshow("All", out);
 
-   imwrite("canny.jpg", out);
+   imwrite("canny.jpg", out);*/
+
+	/*myMedianFilter(src1Smaller, dst[0], Size(3, 3));
+	Mat out;
+	hconcat(src1Smaller, dst[0], out);
+	imwrite("median.png", out);
+	imshow("All", out);*/
+
+	myGammaCorrection(src1, dst[0], 0.75);
+	Mat out;
+	hconcat(src1, dst[0], out);
+	imwrite("gamma.png", out);
+	imshow("All", out);
 
 	std::vector<std::vector<uchar>> chainCodes;
 	/*myMooreBoundary(dst[5], chainCodes);*/
@@ -583,7 +592,7 @@ void myLaplacianOfGaussian(const Mat& myImage, Mat& result, Size kSize,
 Broke canny up into separate stages to observe each stage's effect. Could
 be made much more efficient by combining the stages.
 */
-void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
+void myCanny(const Mat& myImage, std::array<Mat, 6>& result, Size kSize, int sigX, int sigY,
 	int weakThreshold, int strongThreshold)
 {
 	result[0] = myImage;
@@ -619,7 +628,7 @@ void myCanny(const Mat& myImage, Mat result[], Size kSize, int sigX, int sigY,
 				edgeStrength.at<uchar>(row, col) = EdgeStrength::Weak;
 
 			magnitude.at<short>(row, col) = mag;
-			arctanVal = cvFastArctan(y, x);
+			arctanVal = fastAtan2(y, x);
 			rounded = ((short)(arctanVal + 22.5) / 45) * 45;
 			if (rounded > 135) rounded -= 180;
 			direction.at<short>(row, col) = rounded;
